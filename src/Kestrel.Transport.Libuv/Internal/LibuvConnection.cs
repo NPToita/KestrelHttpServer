@@ -63,7 +63,8 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Transport.Libuv.Internal
 
                 StartReading();
 
-                Exception error = null;
+                Exception inputError = null;
+                Exception outputError = null;
 
                 try
                 {
@@ -74,17 +75,23 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Transport.Libuv.Internal
                 }
                 catch (UvException ex)
                 {
-                    if (ex.StatusCode != LibuvConstants.ECANCELED)
+                    // The connection reset/error has already been logged by LibuvOutputConsumer
+                    if (LibuvConstants.IsConnectionReset(ex.StatusCode))
                     {
-                        // ECANCELED errors will become a ConnectionAbortedExceptions below.
-                        error = new IOException(ex.Message, ex);
+                        // Don't cause writes to throw for connection resets.
+                        inputError = new ConnectionResetException(ex.Message, ex);
+                    }
+                    else
+                    {
+                        inputError = ex;
+                        outputError = ex;
                     }
                 }
                 finally
                 {
                     // Now, complete the input so that no more reads can happen
-                    Input.Complete(error ?? new ConnectionAbortedException());
-                    Output.Complete(error);
+                    Input.Complete(inputError ?? new ConnectionAbortedException());
+                    Output.Complete(outputError);
 
                     // Make sure it isn't possible for a paused read to resume reading after calling uv_close
                     // on the stream handle

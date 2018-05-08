@@ -198,7 +198,16 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets.Internal
             {
                 await ProcessSends();
             }
-            catch (SocketException ex) when (ex.SocketErrorCode == SocketError.OperationAborted)
+            catch (SocketException ex) when (ex.SocketErrorCode == SocketError.ConnectionReset ||
+                                             ex.SocketErrorCode == SocketError.ConnectionAborted)
+            {
+                // A connection reset can be reported as SocketError.ConnectionAborted on Windows
+                error = null;
+                _trace.ConnectionReset(ConnectionId);
+            }
+            catch (SocketException ex) when (ex.SocketErrorCode == SocketError.OperationAborted ||
+                                             ex.SocketErrorCode == SocketError.Interrupted ||
+                                             ex.SocketErrorCode == SocketError.InvalidArgument)
             {
                 error = null;
             }

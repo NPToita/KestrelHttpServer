@@ -2784,6 +2784,97 @@ namespace Microsoft.AspNetCore.Server.Kestrel.FunctionalTests
             }
         }
 
+        [Fact]
+        public async Task ConnectionResetObservedInWriteCallbackIsLoggedAsSuch()
+        {
+            const int connectionPausedEventId = 4;
+            const int connectionResetEventId = 19;
+
+            var readCallbackUnwired = new TaskCompletionSource<object>(TaskContinuationOptions.RunContinuationsAsynchronously);
+            var appFuncCompleted = new TaskCompletionSource<object>(TaskContinuationOptions.RunContinuationsAsynchronously);
+            var connectionResetLogged = false;
+
+            var mockLogger = new Mock<ILogger>();
+            mockLogger
+                .Setup(logger => logger.IsEnabled(It.IsAny<LogLevel>()))
+                .Returns(true);
+            mockLogger
+                .Setup(logger => logger.Log(It.IsAny<LogLevel>(), It.IsAny<EventId>(), It.IsAny<object>(), It.IsAny<Exception>(), It.IsAny<Func<object, Exception, string>>()))
+                .Callback<LogLevel, EventId, object, Exception, Func<object, Exception, string>>((logLevel, eventId, state, exception, formatter) =>
+                {
+                    if (eventId.Id == connectionPausedEventId)
+                    {
+                        readCallbackUnwired.TrySetResult(null);
+                    }
+                    else if (eventId.Id == connectionResetEventId)
+                    {
+                        connectionResetLogged = true;
+                    }
+
+                    Logger.Log(logLevel, eventId, state, exception, formatter);
+                });
+
+            var mockLoggerFactory = new Mock<ILoggerFactory>();
+            mockLoggerFactory
+                .Setup(factory => factory.CreateLogger(It.IsAny<string>()))
+                .Returns(Logger);
+            mockLoggerFactory
+                .Setup(factory => factory.CreateLogger(It.IsIn("Microsoft.AspNetCore.Server.Kestrel.Transport.Libuv",
+                                                               "Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets")))
+                .Returns(mockLogger.Object);
+
+            var scratchBuffer = new byte[4096];
+
+            var testContext = new TestServiceContext(mockLoggerFactory.Object)
+            {
+                ServerOptions =
+                {
+                    Limits =
+                    {
+                        MaxRequestBufferSize = 4095,
+                        MaxRequestLineSize = 4095,
+                        MaxRequestHeadersTotalSize = 4095,
+                    }
+                }
+            };
+
+            using (var server = new TestServer(async context =>
+            {
+                // Wait until the read callback is no longer hooked up so that the connection
+                // reset can only be observed via a write callback
+                await readCallbackUnwired.Task;
+
+                // 4 GB should be enough to make an RST observable;
+                for (var i = 0; i < 1024 * 1024; i++)
+                {
+                    await context.Response.Body.WriteAsync(scratchBuffer, 0, scratchBuffer.Length);
+                }
+
+                // Writing to the body shouldn't throw since the request aborted token wasn't passed in.
+                appFuncCompleted.SetResult(null);
+            }, testContext))
+            {
+                using (var connection = server.CreateConnection())
+                {
+                    await connection.Send(
+                        "POST / HTTP/1.1",
+                        "Host:",
+                        "Content-Length: 4096",
+                        "",
+                        "");
+
+                    var ignore = connection.Stream.WriteAsync(scratchBuffer, 0, scratchBuffer.Length);
+
+                    connection.Socket.Dispose();
+                }
+
+                await appFuncCompleted.Task.TimeoutAfter(TestConstants.DefaultTimeout);
+
+                // After the app is done with the write loop, the connection reset should be logged.
+                Assert.True(connectionResetLogged, "Connection reset not logged.");
+            }
+        }
+
         public static TheoryData<string, StringValues, string> NullHeaderData
         {
             get

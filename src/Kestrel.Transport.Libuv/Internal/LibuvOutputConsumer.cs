@@ -85,6 +85,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Transport.Libuv.Internal
                         {
                             // Make sure we return the writeReq to the pool
                             pool.Return(writeReq);
+                            writeReq = null;
                         }
                     }
                     else if (result.IsCompleted)
