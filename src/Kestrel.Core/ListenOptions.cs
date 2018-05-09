@@ -17,7 +17,9 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core
     /// Describes either an <see cref="IPEndPoint"/>, Unix domain socket path, or a file descriptor for an already open
     /// socket that Kestrel should bind to or open.
     /// </summary>
+#pragma warning disable PUB0001 // Pubternal type in public API
     public class ListenOptions : IEndPointInformation, IConnectionBuilder
+#pragma warning restore PUB0001 // Pubternal type in public API
     {
         private FileHandleType _handleType;
         internal readonly List<Func<ConnectionDelegate, ConnectionDelegate>> _middleware = new List<Func<ConnectionDelegate, ConnectionDelegate>>();
@@ -58,9 +60,13 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core
         /// <summary>
         /// The type of interface being described: either an <see cref="IPEndPoint"/>, Unix domain socket path, or a file descriptor.
         /// </summary>
+#pragma warning disable PUB0001 // Pubternal type in public API
         public ListenType Type { get; }
+#pragma warning restore PUB0001 // Pubternal type in public API
 
+#pragma warning disable PUB0001 // Pubternal type in public API
         public FileHandleType HandleType
+#pragma warning restore PUB0001 // Pubternal type in public API
         {
             get => _handleType;
             set
@@ -134,7 +140,9 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core
         /// <remarks>
         /// Defaults to empty.
         /// </remarks>
+#pragma warning disable PUB0001 // Pubternal type in public API
         public List<IConnectionAdapter> ConnectionAdapters { get; } = new List<IConnectionAdapter>();
+#pragma warning restore PUB0001 // Pubternal type in public API
 
         public IServiceProvider ApplicationServices => KestrelServerOptions?.ApplicationServices;
 
